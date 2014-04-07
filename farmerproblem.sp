@@ -1,50 +1,63 @@
-#const n = 40.
+#const n=7.
 
 sorts
-	#item = {chicken, fox, seed}.				% Objects of type item (Things that can be transported in the boat)
-	#person = {farmer}.							% The farmer himself
-	#thing = #item + #person.					% A 'thing' is either an item or person
-	#where = {bank1, bank2}.					% A 'where' is a specific location
-	#step = 0..n.								% We will have 0-n time steps
+	#item = {chicken, fox, seed}.											% Objects of type item (Things that can be transported in the boat)
+	#person = {farmer}.														% The farmer himself
+	#thing = #item + #person.												% A 'thing' is either an item or person
+	#location = {bank1, bank2}.												% A 'location' is a specific location
+	#step = 0..n.															% We will have 0-n time steps
+	#fluent = at(#thing(X),#location(L)).									% 'at' denotes the 'location' of a 'thing'
+	#action1 = cross(#location(X),#location(Y),#item(T)):X!=Y.				% The action cross moves item T from location X to location Y
+	#action2 = crossempty(#location(X),#location(Y)):X!=Y.					% The action crossempty moves the farmer from location X to location Y with nothing else
+	#action = #action1 + #action2.											% An action is either action1 or action2
 
 predicates
-	location(#thing, #where, #step).			% Location defines a 'thing' to be at a 'where' at a certain timestep 'step'
-	cross(#where, #where, #item, #step).		% Cross is the action of 'item' going from a location 'where' to a new location 'where' at timestep 'step'
-	crosswithnothing(#where, #where, #step).	% Crosswithnothing denotes the action of crossing the river from location 'where' to new location 'where' with nothing in the boat
-	goal(#step).								% Denotes the time step our goal is reached
-	something_happened(#step).					% Denotes whether or not something happened at timestep 'step'
-	success().									% Used to determine if the system had success in finding a path or not
+	holds(#fluent, #step).
+	occurs(#action, #step).
+	goal(#step).
+	success().
+	something_happened(#step).
 
 rules
-	:- location(chicken, L, I), location(seed, L, I), location(farmer, L2, I), L != L2.		% Chicken and seed cannot be in same location without the farmer present
-	:- location(chicken, L, I), location(fox, L, I), location(farmer, L2, I), L != L2.		% Chicken and fox cannot be in the same location without the farmer present
+	% Initial State
+		holds(at(farmer, bank1),0).
+		holds(at(chicken, bank1),0).
+		holds(at(fox, bank1),0).
+		holds(at(seed, bank1),0).
 
-	location(ITEM, bank2, I+1) :- cross(bank1, bank2, ITEM, I).					% If the cross action occurs, then the ITEM's location has changed
-	location(ITEM, bank1, I+1) :- cross(bank2, bank1, ITEM, I).					% If the cross action occurs, then the ITEM's location has changed
-	location(farmer, bank2, I+1) :- cross(bank1, bank2, ITEM, I).				% If the cross action occurs, then the farmer's location has changed
-	location(farmer, bank1, I+1) :- cross(bank2, bank1, ITEM, I).				% If the cross action occurs, then the farmer's location has changed
-	location(farmer, bank1, I+1) :- crosswithnothing(bank2, bank1, I).			% If the crosswithnothing action occurs, then the farmer's location has changed
-	:- crosswithnothing(bank2, bank1, I), location(farmer, bank1, I).			% It is impossible to crosswithnothing from bank2 to bank1 if the farmer is already at bank1
-	:- cross(L1, L2, ITEM, I), location(ITEM, L2, I), L1 != L2.					% It is impossible to cross with an item if the item is not at your starting location
-	-location(T,L1,I) :- location(T,L2,I), L1 != L2.							% Any thing cannot be in two places at once
+	% Causal Laws
+		holds(at(T,L2), I+1) :- occurs(cross(L1,L2,T),I).					% If thing T crosses from L1 to L2 at I, it will be at L2 at I+1
+		holds(at(farmer, L2), I+1) :- occurs(cross(L1,L2,T),I).				% If a cross action occurs from L1 to L2 at I, the farmer is at L2 at I+1
+		holds(at(farmer, L2), I+1) :- occurs(crossempty(L1,L2),I).			% If a crossempty action occurs from L1 to L2 at I, the farmer is at L2 at I+1
 
-	-cross(L1, L2, ITEM, I) :- not cross(L1, L2, ITEM, I).						% Closed World Assumption (cross)
-	-crosswithnothing(bank2,bank1,I) :- not crosswithnothing(bank2,bank1,I).	% Closed World Assumption (crosswithnothing)
+	% Executability Constraints
+		:- holds(at(chicken, L), I), holds(at(seed, L), I), -holds(at(farmer, L), I).	% Chicken and seed cannot be in same location without the farmer present
+		:- holds(at(chicken, L), I), holds(at(fox, L), I), -holds(at(farmer, L), I).	% Chicken and fox cannot be in same location without the farmer present
 
-	% Planning module
-	success :- goal(I), I < n.													% Program is successful if the goal is met at time I
-	:- not success.																% Failure is not an option
+		:- occurs(cross(L1,L2,T),I), -holds(at(T,L1),I).					% You cannot move a thing from L1 to L2 if it isn't at L1 at that time step
+		:- occurs(crossempty(L1,L2),I), -holds(at(farmer,L1),I), L1 != L2.	% The farmer cannot cross from L1 to L2 if he isn't at L1 at that time step
+		:- occurs(cross(L1,L2,T),I), -holds(at(farmer,L1),I), L1 != L2.		% The farmer cannot cross from L1 to L2 if he isn't at L1 at that time step
+		:- occurs(crossempty(L1,L2),I), occurs(crossempty(L2,L1),I+1).		% Don't allow unproductive crosses
 
-	cross(bank1, bank2, ITEM, I) | cross(bank2, bank1, ITEM, I) | crosswithnothing(bank2,bank1,I) |
-		-cross(bank1, bank2, ITEM, I) | -cross(bank2, bank1, ITEM, I) | -crosswithnothing(bank2,bank1,I) :- not goal(I), I < n.
-	:- cross(L1, L2, ITEM, I), cross(L2, L1, ITEM, I), L1 != L2.
-	:- cross(L1, L2, ITEM1, I), cross(L1, L2, ITEM2, I), ITEM1 != ITEM2.
-	something_happened(I) :- cross(L1,L2,ITEM,I).								% Something happened at time I if a put action occurred at time I
-	something_happened(I) :- crosswithnothing(bank2,bank1,I).
-	:- goal(I), not something_happened(J), J < I.								% Something must happen at every time step I
+	% Dynamic Properties and CWA
+		holds(F,I+1) :- holds(F,I), not -holds(F,I+1).		% Inertia Axiom, Part 1
+		-holds(F,I+1) :- -holds(F,I), not holds(F,I+1).		% Inertia Axiom, Part 2
+		-occurs(A,I) :- not occurs(A,I).					% Closed World Assumption:  For actions
+		-holds(at(T,L1),I) :- holds(at(T,L2),I), L1 != L2.	% Closed World Assumption:  For fluent "at"
 
-	% Goal Condition
-	goal(I) :- location(farmer, bank2, I), location(chicken, bank2, I), location(fox, bank2, I), location(seed, bank2,I).
+	% Planning Module
+		success :- goal(I), I <= n.
+		:- not success.
 
-	% Initial configuration
-	location(farmer, bank1, 0).  location(chicken, bank1, 0).  location(fox, bank1, 0).  location(seed, bank1, 0).
+		occurs(A,I) | -occurs(A,I) :- not goal(I), I < n.				% Generation
+
+		:- occurs(A1, I), occurs(A2, I), A1 != A2.						% Do not allow concurrent actions
+		something_happened(I) :- occurs(A,I).							% An action occurs at each step before the goal is achieved.
+		:- goal(I), not something_happened(J), J < I.
+
+		% Goal State
+		goal(I) :- 	holds(at(farmer, bank2),I),
+					holds(at(chicken, bank2),I),
+					holds(at(fox, bank2),I),
+					holds(at(seed, bank2),I).
+
