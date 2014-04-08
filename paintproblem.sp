@@ -6,7 +6,7 @@ sorts
 	#location = #block+{t}.
 	#color = {white,red}.
 	#inertial1 = on(#block(X),#location(Y)):X!=Y.
-	#inertial2 = color(#block(X),#color(Y)).
+	#inertial2 = iscolor(#block(X),#iscolor(Y)).
 	#inertial = #inertial1 + #inertial2
 	#defined1 = above(#block(X),#location(Y)):X!=Y.
 	#defined2 = wrong_config(#block(B)).
@@ -24,7 +24,6 @@ predicates
 	goal(#step).
 	something_happened(#step).
 	success().
-	heavy(#block).
 
 rules
 	% Initial State:
@@ -37,8 +36,8 @@ rules
 		holds(on(b6,t),0).
 		holds(on(b7,t),0).
 		
-		holds(color(b0,red),0).  holds(color(b3,red),0). holds(color(b4,red),0).  holds(color(b5,red),0).
-		holds(color(b1,white),0).  holds(color(b2,white),0). holds(color(b6,white),0).  holds(color(b7,white),0).
+		holds(iscolor(b0,red),0).  holds(iscolor(b3,red),0). holds(iscolor(b4,red),0).  holds(iscolor(b5,red),0).
+		holds(iscolor(b1,white),0).  holds(iscolor(b2,white),0). holds(iscolor(b6,white),0).  holds(iscolor(b7,white),0).
 
 	% Domain Laws
 		holds(on(B,L), I+1) :- occurs(put(B,L),I), I < n.					% Law 1	
@@ -49,9 +48,9 @@ rules
 		-occurs(put(B,L),I) :- holds(on(B1,B),I). 							% Law 6
 		-occurs(put(B1,B),I) :- holds(on(B2,B),I), #block(B). 				% Law 7
 
-		:- occurs(paint(B,C),I), occurs(put(B,L),I).								% Cannot paint block in transit
-		holds(occupied(B),I) :- holds(on(B1,B),I).									% A block is occupied if it has something on top of it
-		holds(wrong_config(B),I) :- -holds(occupied(B),I), -holds(color(B,red),I).	% A block is in the wrong configuration if it is the top of a tower and isn't red
+		:- occurs(paint(B,C),I), occurs(put(B,L),I).									% Cannot paint block in transit
+		holds(occupied(B),I) :- holds(on(B1,B),I).										% A block is occupied if it has something on top of it
+		holds(wrong_config(B),I) :- -holds(occupied(B),I), -holds(iscolor(B,red),I).	% A block is in the wrong configuration if it is the top of a tower and isn't red
 
 	% Dynamic Properties and CWA
 		-holds(F,I) :- #defined(F), not holds(F,I).							% Closed World Assumption for Defined Fluents
@@ -76,8 +75,8 @@ rules
 	%  ANSWERS TO QUESTIONS:
 	%
 	%		1)  What is the shortest plan that the program comes up with if action "paint" is allowed?
-	%			a)  The number of steps in the shortest plan will be equal to the number of towers in the
-	%				initial configuration without a red block on top.
+	%			a)  The shortest plan contains 0 steps if all towers have a red block on top.
+	%				The shortest plan contains 1 step for any other initial configuration, since paint actions can occur concurrently.
 	%
 	%		2)	What is the shortest plan if action "paint" does not exist?
 	%			a)	The answer relies completely on the chosen initial configuration.
